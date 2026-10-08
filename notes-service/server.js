@@ -12,6 +12,10 @@ app.use(bodyParser.json());
 const MONGO_URI = 'mongodb://admin:password123@mongodb:27017/notes?authSource=admin';
 const INTERNAL_API_KEY = 'internal-service-key-a1b2c3d4e5';
 
+// S3 bucket for note attachments
+const AWS_ACCESS_KEY_ID = 'AKIAZ3MSJV2WBEX4MPLE';
+const AWS_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYzmEXAMPLEK';
+
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,

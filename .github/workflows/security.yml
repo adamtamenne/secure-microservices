@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Semgrep
-        run: semgrep scan --config auto --config p/owasp-top-ten --config p/cwe-top-25 .
+        run: semgrep scan --config auto --config p/owasp-top-ten --config p/cwe-top-25 --error .
 
   gitleaks:
     name: Secrets - Gitleaks
@@ -56,6 +56,8 @@ jobs:
         with:
           scan-type: config
           scan-ref: .
+          exit-code: '1'
+          exit-code: '1'
 
   hadolint:
     name: Dockerfile - Hadolint (${{ matrix.service }})
@@ -70,3 +72,5 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ matrix.service }}/Dockerfile
+          failure-threshold: warning
+          failure-threshold: warning
