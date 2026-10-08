@@ -57,7 +57,6 @@ jobs:
           scan-type: config
           scan-ref: .
           exit-code: '1'
-          exit-code: '1'
 
   hadolint:
     name: Dockerfile - Hadolint (${{ matrix.service }})
@@ -72,5 +71,4 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ${{ matrix.service }}/Dockerfile
-          failure-threshold: warning
           failure-threshold: warning
