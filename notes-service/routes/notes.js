@@ -41,25 +41,27 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Search notes with filter
+// SECURITY FIX: Removed eval() injection (CWE-95)
+// BEFORE: user-supplied 'filter' param was passed directly to eval(),
+// allowing arbitrary code execution on the server.
+// FIX: Safe MongoDB query parameters for text and tag filtering.
 router.get('/search', authenticate, async (req, res) => {
   try {
-    const { q, filter } = req.query;
-    let notes;
+    const { q, tag } = req.query;
+    let query = {};
 
-    if (filter) {
-      const allNotes = await Note.find();
-      notes = allNotes.filter(note => eval(filter));
-    } else if (q) {
-      notes = await Note.find({
-        $or: [
-          { title: { $regex: q } },
-          { content: { $regex: q } },
-        ],
-      });
-    } else {
-      notes = await Note.find();
+    if (q) {
+      query.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { content: { $regex: q, $options: 'i' } },
+      ];
     }
 
+    if (tag) {
+      query.tags = tag;
+    }
+
+    const notes = await Note.find(query);
     res.json(notes);
   } catch (err) {
     res.status(500).json({ error: err.message });
