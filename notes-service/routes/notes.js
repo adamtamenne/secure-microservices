@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { exec } = require('child_process');
+// child_process.exec() spawns a system shell (/bin/sh) and runs
+// the string you pass as a shell command. Any user input concatenated
+// into that string is interpreted by the shell
+// const { exec } = require('child_process');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -69,20 +72,39 @@ router.get('/search', authenticate, async (req, res) => {
 });
 
 // Export notes to file
+// Command injection via exec() (CWE-78)
+// BEFORE: format param went straight into exec(`cp ... ${format}`), so
+// requesting /export/json;rm+-rf+/ ran that as a shell command. Classic RCE.
+// FIX: Allowlist the format, use fs.copyFileSync (no shell involved), clean up tmp files.
 router.get('/export/:format', authenticate, async (req, res) => {
   try {
+    // Only accept known formats. Allowlist > denylist because you can't
+    // anticipate every shell metacharacter trick.
+    const allowedFormats = ['json', 'csv', 'txt'];
     const format = req.params.format;
+
+    if (!allowedFormats.includes(format)) {
+      return res.status(400).json({ error: `Invalid format. Allowed: ${allowedFormats.join(', ')}` });
+    }
+
     const notes = await Note.find({ userId: req.user.id });
     const data = JSON.stringify(notes, null, 2);
 
     const tmpFile = `/tmp/export-${Date.now()}`;
-    fs.writeFileSync(`${tmpFile}.json`, data);
+    const srcPath = `${tmpFile}.json`;
+    const destPath = `${tmpFile}.${format}`;
 
-    exec(`cp ${tmpFile}.json ${tmpFile}.${format}`, (err) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
+    fs.writeFileSync(srcPath, data);
+    // copyFileSync talks to the OS directly, no shell spawned, nothing to inject into.
+    fs.copyFileSync(srcPath, destPath);
+
+    res.download(destPath, (err) => {
+      // Clean up so we don't leak temp files forever.
+      try { fs.unlinkSync(srcPath); } catch (_) {}
+      try { fs.unlinkSync(destPath); } catch (_) {}
+      if (err && !res.headersSent) {
+        res.status(500).json({ error: 'Download failed' });
       }
-      res.download(`${tmpFile}.${format}`);
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
