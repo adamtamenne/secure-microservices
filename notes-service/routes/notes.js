@@ -181,10 +181,59 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // Import note from URL
+// SECURITY FIX: Server-Side Request Forgery (CWE-918)
+// BEFORE: any URL the user sent was fetched by the server with no checks,
+// so an attacker could hit internal services, cloud metadata endpoints,
+// or localhost to steal credentials and map the internal network.
+// FIX: Only allow http/https, block private/reserved IPs after resolving
+// the hostname (prevents DNS rebinding too), cap response size.
 router.post('/import', authenticate, async (req, res) => {
   try {
     const { url, title } = req.body;
-    const response = await axios.get(url);
+
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Only allow http and https. Without this, an attacker could use
+    // file://, gopher://, etc. to read local files or talk to internal services.
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (_) {
+      return res.status(400).json({ error: 'Invalid URL' });
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are allowed' });
+    }
+
+    // Resolve the hostname to an IP and check it before making the request.
+    // This stops requests to 169.254.169.254 (AWS metadata), 10.x, 172.16.x,
+    // 192.168.x, localhost, etc. We resolve first so attackers can't just
+    // point a DNS name at an internal IP to bypass string checks on the hostname.
+    const dns = require('dns').promises;
+    const { address } = await dns.lookup(parsed.hostname);
+    const blocked = [
+      /^127\./,                    // loopback
+      /^10\./,                     // private class A
+      /^172\.(1[6-9]|2\d|3[01])\./, // private class B
+      /^192\.168\./,               // private class C
+      /^169\.254\./,               // link-local / cloud metadata
+      /^0\./,                      // "this" network
+      /^::1$/,                     // IPv6 loopback
+      /^f[cd]/i,                   // IPv6 private
+    ];
+
+    if (blocked.some(rx => rx.test(address))) {
+      return res.status(400).json({ error: 'URLs pointing to internal/private networks are not allowed' });
+    }
+
+    // Cap response size so an attacker can't make the server download a 10GB file.
+    const response = await axios.get(parsed.href, {
+      maxContentLength: 5 * 1024 * 1024, // 5MB
+      timeout: 10000, // 10s so it can't be used to hold connections open
+    });
 
     const note = new Note({
       title: title || 'Imported Note',
