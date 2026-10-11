@@ -136,9 +136,21 @@ router.get('/uploads', authenticate, (req, res) => {
 });
 
 // Serve note attachments
+// SECURITY FIX: Path traversal via filename param (CWE-22)
+// BEFORE: filename like "../../etc/passwd" would resolve outside the uploads
+// directory, letting an attacker download any file the process can read.
+// FIX: Resolve the full path, then confirm it's still inside the uploads folder.
 router.get('/files/:filename', authenticate, (req, res) => {
   const filename = req.params.filename;
-  const filePath = path.join(__dirname, '../uploads', filename);
+  const uploadsDir = path.resolve(__dirname, '../uploads');
+  const filePath = path.resolve(uploadsDir, filename);
+
+  // After path.resolve flattens out the ".." sequences, check whether the
+  // final path still starts with the uploads directory. If not, someone
+  // is trying to escape it.
+  if (!filePath.startsWith(uploadsDir + path.sep) && filePath !== uploadsDir) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
 
   res.sendFile(filePath);
 });
