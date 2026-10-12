@@ -112,8 +112,25 @@ router.get('/export/:format', authenticate, async (req, res) => {
 });
 
 // Redirect
+// SECURITY FIX: Open redirect (CWE-601)
+// BEFORE: any URL passed in the query string was blindly redirected to,
+// so an attacker could craft a link like /redirect?url=https://evil.com
+// that starts on your domain but lands the user on a phishing site.
+// FIX: Only allow relative paths (same-site navigation). Block anything
+// with a protocol or that starts with // (protocol-relative URL).
 router.get('/redirect', (req, res) => {
   const { url } = req.query;
+
+  if (!url) {
+    return res.status(400).json({ error: 'Missing url parameter' });
+  }
+
+  // Block absolute URLs and protocol-relative URLs (//evil.com).
+  // Only allow paths like /dashboard or /notes/123.
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(url) || url.startsWith('//')) {
+    return res.status(400).json({ error: 'External redirects are not allowed' });
+  }
+
   res.redirect(url);
 });
 
