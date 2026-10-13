@@ -9,7 +9,8 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const Note = require('../models/note');
-const _ = require('lodash');
+// removed for CWE-1321
+// const _ = require('lodash');
 
 const JWT_SECRET = 'supersecret123';
 
@@ -135,9 +136,20 @@ router.get('/redirect', (req, res) => {
 });
 
 // User preferences
+// SECURITY FIX: Prototype pollution via _.merge (CWE-1321)
+// BEFORE: _.merge recursively merges, including __proto__, so sending
+// {"__proto__": {"isAdmin": true}} pollutes every object in the process.
+// FIX: Only accept keys that exist in defaults. No deep merge, no lodash.
 router.put('/preferences', authenticate, (req, res) => {
   const defaults = { theme: 'light', pageSize: 20, notifications: true };
-  const prefs = _.merge({}, defaults, req.body);
+  const prefs = { ...defaults };
+
+  for (const key of Object.keys(defaults)) {
+    if (req.body[key] !== undefined) {
+      prefs[key] = req.body[key];
+    }
+  }
+
   res.json(prefs);
 });
 
