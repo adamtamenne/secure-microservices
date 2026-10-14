@@ -204,20 +204,26 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // Create note
+// SECURITY FIX: Mass assignment via spread operator (CWE-915)
+// BEFORE: ...req.body let the user set ANY field on the model, including
+// userId (impersonate someone), createdAt, or future fields we add later.
+// FIX: Only pick the fields we actually expect from user input.
 router.post('/', authenticate, async (req, res) => {
   try {
     const { title, content, tags } = req.body;
 
     if (tags) {
-      tags.forEach(tag => {
+      for (const tag of tags) {
         if (!isValidTag(tag)) {
           return res.status(400).json({ error: `Invalid tag: ${tag}` });
         }
-      });
+      }
     }
 
     const note = new Note({
-      ...req.body,
+      title,
+      content,
+      tags,
       userId: req.user.id,
     });
     await note.save();
