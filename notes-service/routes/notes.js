@@ -15,8 +15,14 @@ const Note = require('../models/note');
 const JWT_SECRET = 'supersecret123';
 
 // Tag validation
+// SECURITY FIX: ReDoS from nested quantifiers (CWE-1333)
+// BEFORE: /^([a-zA-Z0-9]+\s?)+$/ has + inside +, so a long string
+// ending in an invalid char causes exponential backtracking that
+// hangs the server. Classic ReDoS.
+// FIX: Flat pattern with no nesting. The space is a literal separator
+// between words, not an optional char inside a repeated group.
 function isValidTag(tag) {
-  const tagRegex = /^([a-zA-Z0-9]+\s?)+$/;
+  const tagRegex = /^[a-zA-Z0-9]+( [a-zA-Z0-9]+)*$/;
   return tagRegex.test(tag);
 }
 
